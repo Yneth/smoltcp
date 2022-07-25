@@ -119,10 +119,10 @@ impl<'a> SocketSet<'a> {
     /// # Panics
     /// This function may panic if the handle does not belong to this socket set
     /// or the socket has the wrong type.
-    pub fn with_mut<T: AnySocket<'a>, F, R>(&mut self, handle: SocketHandle, map_fn: F) -> R
+    pub fn with_mut<T: AnySocket<'a>, F, R>(&self, handle: SocketHandle, map_fn: F) -> R
         where F: FnOnce(&mut T) -> R
     {
-        let guard = self.sockets[handle.0].inner.as_mut()
+        let guard = self.sockets[handle.0].inner.as_ref()
             .expect("handle does not refer to a valid socket");
 
         let mut maybe_item = guard.write();

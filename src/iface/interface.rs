@@ -4201,7 +4201,7 @@ mod test {
         let seq_no = 0x5432;
         let echo_data = &[0xff; 16];
 
-        let socket = sockets.with_mut::<icmp::Socket, _, _>(socket_handle, |socket| {
+        sockets.with_mut::<icmp::Socket, _, _>(socket_handle, |socket| {
             // Bind to the ID 0x1234
             assert_eq!(socket.bind(icmp::Endpoint::Ident(ident)), Ok(()));
         });
