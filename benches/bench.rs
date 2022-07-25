@@ -1,4 +1,4 @@
-#![feature(test)]
+// #![feature(test)]
 
 mod wire {
     use smoltcp::phy::ChecksumCapabilities;

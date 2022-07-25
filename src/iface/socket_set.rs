@@ -1,16 +1,22 @@
 use core::fmt;
+use std::sync::{Arc};
+use parking_lot::{RwLock};
+
 use managed::ManagedSlice;
 
-use super::socket_meta::Meta;
 use crate::socket::{AnySocket, Socket};
+
+use super::socket_meta::Meta;
 
 /// Opaque struct with space for storing one socket.
 ///
 /// This is public so you can use it to allocate space for storing
 /// sockets when creating an Interface.
+/// Think of padding, reference:
+/// https://www.reddit.com/r/rust/comments/bijoco/rust_array_of_mutexes/
 #[derive(Debug, Default)]
 pub struct SocketStorage<'a> {
-    inner: Option<Item<'a>>,
+    inner: Option<Arc<RwLock<Option<Item<'a>>>>>,
 }
 
 impl<'a> SocketStorage<'a> {
@@ -46,8 +52,8 @@ pub struct SocketSet<'a> {
 impl<'a> SocketSet<'a> {
     /// Create a socket set using the provided storage.
     pub fn new<SocketsT>(sockets: SocketsT) -> SocketSet<'a>
-    where
-        SocketsT: Into<ManagedSlice<'a, SocketStorage<'a>>>,
+        where
+            SocketsT: Into<ManagedSlice<'a, SocketStorage<'a>>>,
     {
         let sockets = sockets.into();
         SocketSet { sockets }
@@ -64,7 +70,7 @@ impl<'a> SocketSet<'a> {
             let mut meta = Meta::default();
             meta.handle = handle;
             *slot = SocketStorage {
-                inner: Some(Item { meta, socket }),
+                inner: Some(Arc::new(RwLock::new(Some(Item { meta, socket })))),
             };
             handle
         }
@@ -93,13 +99,19 @@ impl<'a> SocketSet<'a> {
     /// # Panics
     /// This function may panic if the handle does not belong to this socket set
     /// or the socket has the wrong type.
-    pub fn get<T: AnySocket<'a>>(&self, handle: SocketHandle) -> &T {
-        match self.sockets[handle.0].inner.as_ref() {
-            Some(item) => {
-                T::downcast(&item.socket).expect("handle refers to a socket of a wrong type")
-            }
-            None => panic!("handle does not refer to a valid socket"),
-        }
+    pub fn with<T: AnySocket<'a>, F, R>(&self, handle: SocketHandle, map_fn: F) -> R
+        where F: FnOnce(&T) -> R
+    {
+        let guard = self.sockets[handle.0].inner.as_ref()
+            .expect("handle does not refer to a valid socket");
+
+        let maybe_item = guard.read();
+        let item = maybe_item.as_ref()
+            .expect("handle does not refer to a valid socket");
+
+        let socket = T::downcast(&item.socket)
+            .expect("inner handle refers to a socket of a wrong type");
+        map_fn(socket)
     }
 
     /// Get a mutable socket from the set by its handle, as mutable.
@@ -107,12 +119,19 @@ impl<'a> SocketSet<'a> {
     /// # Panics
     /// This function may panic if the handle does not belong to this socket set
     /// or the socket has the wrong type.
-    pub fn get_mut<T: AnySocket<'a>>(&mut self, handle: SocketHandle) -> &mut T {
-        match self.sockets[handle.0].inner.as_mut() {
-            Some(item) => T::downcast_mut(&mut item.socket)
-                .expect("handle refers to a socket of a wrong type"),
-            None => panic!("handle does not refer to a valid socket"),
-        }
+    pub fn with_mut<T: AnySocket<'a>, F, R>(&mut self, handle: SocketHandle, map_fn: F) -> R
+        where F: FnOnce(&mut T) -> R
+    {
+        let guard = self.sockets[handle.0].inner.as_mut()
+            .expect("handle does not refer to a valid socket");
+
+        let mut maybe_item = guard.write();
+        let item = maybe_item.as_mut()
+            .expect("handle does not refer to a valid socket");
+
+        let mut socket = T::downcast_mut(&mut item.socket)
+            .expect("inner handle refers to a socket of a wrong type");
+        map_fn(&mut socket)
     }
 
     /// Remove a socket from the set, without changing its state.
@@ -121,29 +140,17 @@ impl<'a> SocketSet<'a> {
     /// This function may panic if the handle does not belong to this socket set.
     pub fn remove(&mut self, handle: SocketHandle) -> Socket<'a> {
         net_trace!("[{}]: removing", handle.0);
-        match self.sockets[handle.0].inner.take() {
-            Some(item) => item.socket,
-            None => panic!("handle does not refer to a valid socket"),
-        }
-    }
+        let guard = self.sockets[handle.0].inner.take()
+            .expect("handle does not refer to a valid socket");
 
-    /// Get an iterator to the inner sockets.
-    pub fn iter(&self) -> impl Iterator<Item = (SocketHandle, &Socket<'a>)> {
-        self.items().map(|i| (i.meta.handle, &i.socket))
-    }
+        let item = guard.write().take()
+            .expect("inner handle does not refer to a valid socket");
 
-    /// Get a mutable iterator to the inner sockets.
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = (SocketHandle, &mut Socket<'a>)> {
-        self.items_mut().map(|i| (i.meta.handle, &mut i.socket))
+        item.socket
     }
 
     /// Iterate every socket in this set.
-    pub(crate) fn items(&self) -> impl Iterator<Item = &Item<'a>> + '_ {
-        self.sockets.iter().filter_map(|x| x.inner.as_ref())
-    }
-
-    /// Iterate every socket in this set.
-    pub(crate) fn items_mut(&mut self) -> impl Iterator<Item = &mut Item<'a>> + '_ {
-        self.sockets.iter_mut().filter_map(|x| x.inner.as_mut())
+    pub(crate) fn items(&self) -> impl Iterator<Item = Arc<RwLock<Option<Item<'a>>>>> + '_ {
+        self.sockets.iter().filter_map(|x| x.inner.clone())
     }
 }
