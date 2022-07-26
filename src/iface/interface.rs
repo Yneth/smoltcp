@@ -854,7 +854,7 @@ impl<'a> Interface<'a> {
         &mut self,
         timestamp: Instant,
         device: &mut D,
-        sockets: &mut SocketSet<'_>,
+        sockets: &SocketSet<'_>,
     ) -> Result<bool>
         where
             D: for<'d> Device<'d>,
@@ -952,7 +952,7 @@ impl<'a> Interface<'a> {
         }
     }
 
-    fn socket_ingress<D>(&mut self, device: &mut D, sockets: &mut SocketSet<'_>) -> bool
+    fn socket_ingress<D>(&mut self, device: &mut D, sockets: &SocketSet<'_>) -> bool
         where
             D: for<'d> Device<'d>,
     {
@@ -1006,7 +1006,7 @@ impl<'a> Interface<'a> {
         processed_any
     }
 
-    fn socket_egress<D>(&mut self, device: &mut D, sockets: &mut SocketSet<'_>) -> bool
+    fn socket_egress<D>(&mut self, device: &mut D, sockets: &SocketSet<'_>) -> bool
         where
             D: for<'d> Device<'d>,
     {
@@ -1433,7 +1433,7 @@ impl<'a> InterfaceInner<'a> {
     #[cfg(feature = "medium-ethernet")]
     fn process_ethernet<'frame, T: AsRef<[u8]>>(
         &mut self,
-        sockets: &mut SocketSet,
+        sockets: &SocketSet,
         frame: &'frame T,
         _fragments: &'frame mut FragmentsBuffer<'a>,
     ) -> Option<EthernetPacket<'frame>> {
@@ -1476,7 +1476,7 @@ impl<'a> InterfaceInner<'a> {
     #[cfg(feature = "medium-ip")]
     fn process_ip<'frame, T: AsRef<[u8]>>(
         &mut self,
-        sockets: &mut SocketSet,
+        sockets: &SocketSet,
         ip_payload: &'frame T,
         _fragments: &'frame mut FragmentsBuffer<'a>,
     ) -> Option<IpPacket<'frame>> {
@@ -1506,7 +1506,7 @@ impl<'a> InterfaceInner<'a> {
     #[cfg(feature = "medium-ieee802154")]
     fn process_ieee802154<'output, 'payload: 'output, T: AsRef<[u8]> + ?Sized>(
         &mut self,
-        sockets: &mut SocketSet,
+        sockets: &SocketSet,
         sixlowpan_payload: &'payload T,
         _fragments: &'output mut FragmentsBuffer<'a>,
     ) -> Option<IpPacket<'output>> {
@@ -1548,7 +1548,7 @@ impl<'a> InterfaceInner<'a> {
     #[cfg(feature = "proto-sixlowpan")]
     fn process_sixlowpan<'output, 'payload: 'output, T: AsRef<[u8]> + ?Sized>(
         &mut self,
-        sockets: &mut SocketSet,
+        sockets: &SocketSet,
         ieee802154_repr: &Ieee802154Repr,
         payload: &'payload T,
         _fragments: Option<&'output mut PacketAssemblerSet<'a, SixlowpanFragKey>>,
@@ -1825,7 +1825,7 @@ impl<'a> InterfaceInner<'a> {
     #[cfg(feature = "socket-raw")]
     fn raw_socket_filter<'frame>(
         &mut self,
-        sockets: &mut SocketSet,
+        sockets: &SocketSet,
         ip_repr: &IpRepr,
         ip_payload: &'frame [u8],
     ) -> bool {
@@ -1846,7 +1846,7 @@ impl<'a> InterfaceInner<'a> {
     #[cfg(feature = "proto-ipv6")]
     fn process_ipv6<'frame, T: AsRef<[u8]> + ?Sized>(
         &mut self,
-        sockets: &mut SocketSet,
+        sockets: &SocketSet,
         ipv6_packet: &Ipv6Packet<&'frame T>,
     ) -> Option<IpPacket<'frame>> {
         let ipv6_repr = check!(Ipv6Repr::parse(ipv6_packet));
@@ -1878,7 +1878,7 @@ impl<'a> InterfaceInner<'a> {
     #[cfg(feature = "proto-ipv6")]
     fn process_nxt_hdr<'frame>(
         &mut self,
-        sockets: &mut SocketSet,
+        sockets: &SocketSet,
         ipv6_repr: Ipv6Repr,
         nxt_hdr: IpProtocol,
         handled_by_raw_socket: bool,
@@ -1921,7 +1921,7 @@ impl<'a> InterfaceInner<'a> {
     #[cfg(feature = "proto-ipv4")]
     fn process_ipv4<'output, 'payload: 'output, T: AsRef<[u8]> + ?Sized>(
         &mut self,
-        sockets: &mut SocketSet,
+        sockets: &SocketSet,
         ipv4_packet: &Ipv4Packet<&'payload T>,
         _fragments: Option<&'output mut PacketAssemblerSet<'a, Ipv4FragKey>>,
     ) -> Option<IpPacket<'output>> {
@@ -2164,7 +2164,7 @@ impl<'a> InterfaceInner<'a> {
     #[cfg(feature = "proto-ipv6")]
     fn process_icmpv6<'frame>(
         &mut self,
-        _sockets: &mut SocketSet,
+        _sockets: &SocketSet,
         ip_repr: IpRepr,
         ip_payload: &'frame [u8],
     ) -> Option<IpPacket<'frame>> {
@@ -2309,7 +2309,7 @@ impl<'a> InterfaceInner<'a> {
     #[cfg(feature = "proto-ipv6")]
     fn process_hopbyhop<'frame>(
         &mut self,
-        sockets: &mut SocketSet,
+        sockets: &SocketSet,
         ipv6_repr: Ipv6Repr,
         handled_by_raw_socket: bool,
         ip_payload: &'frame [u8],
@@ -2347,7 +2347,7 @@ impl<'a> InterfaceInner<'a> {
     #[cfg(feature = "proto-ipv4")]
     fn process_icmpv4<'frame>(
         &mut self,
-        _sockets: &mut SocketSet,
+        _sockets: &SocketSet,
         ip_repr: IpRepr,
         ip_payload: &'frame [u8],
     ) -> Option<IpPacket<'frame>> {
@@ -2466,7 +2466,7 @@ impl<'a> InterfaceInner<'a> {
     #[cfg(any(feature = "socket-udp", feature = "socket-dns"))]
     fn process_udp<'frame>(
         &mut self,
-        sockets: &mut SocketSet,
+        sockets: &SocketSet,
         ip_repr: IpRepr,
         handled_by_raw_socket: bool,
         ip_payload: &'frame [u8],
@@ -2535,7 +2535,7 @@ impl<'a> InterfaceInner<'a> {
     #[cfg(feature = "socket-tcp")]
     fn process_tcp<'frame>(
         &mut self,
-        sockets: &mut SocketSet,
+        sockets: &SocketSet,
         ip_repr: IpRepr,
         ip_payload: &'frame [u8],
     ) -> Option<IpPacket<'frame>> {
